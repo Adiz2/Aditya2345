@@ -1,0 +1,81 @@
+#include <ESP32SPISlave.h>
+ESP32SPISlave slave;
+
+static constexpr uint32_t BUFFER_SIZE {12}; // 11 bytes for "hello esp32" + null terminator
+uint8_t spi_slave_tx_buf[BUFFER_SIZE];
+uint8_t spi_slave_rx_buf[BUFFER_SIZE];
+
+void setup() {
+    Serial.begin(115200);
+    delay(2000);
+    Serial.println("ESP32 SPI Slave starting...");
+
+    // Configure SPI slave with VSPI pins (CS: 5, SCK: 18, MOSI: 23, MISO: 19)
+    slave.setDataMode(SPI_MODE0);
+    slave.setQueueSize(3); // Allow multiple transactions
+    if (!slave.begin(VSPI)) {
+        Serial.println("Failed to initialize SPI slave");
+        while (true); // Halt if initialization fails
+    }
+    Serial.println("SPI slave initialized on VSPI (CS=5, SCK=18, MOSI=23, MISO=19)");
+
+    // Clear buffers
+    memset(spi_slave_tx_buf, 0, BUFFER_SIZE);
+    memset(spi_slave_rx_buf, 0, BUFFER_SIZE);
+}
+
+void loop() {
+    // Queue and wait for transaction from master
+    Serial.println("Waiting for master transaction...");
+    auto results = slave.wait(spi_slave_rx_buf, spi_slave_tx_buf, BUFFER_SIZE, 5000);
+
+    if (!results.empty()) {
+        size_t bytes_received = results[0];
+        Serial.print("Received ");
+        Serial.print(bytes_received);
+        Serial.println(" bytes");
+
+        // Print raw buffer contents for debugging
+        Serial.print("Raw buffer: ");
+        for (size_t i = 0; i < bytes_received && i < BUFFER_SIZE; i++) {
+            Serial.print((char)spi_slave_rx_buf[i]);
+            Serial.print(" (0x");
+            Serial.print(spi_slave_rx_buf[i], HEX);
+            Serial.print(")");
+            if (i < bytes_received - 1) Serial.print(", ");
+        }
+        Serial.println();
+
+        // Ensure null termination for string processing
+        if (bytes_received < BUFFER_SIZE) {
+            spi_slave_rx_buf[bytes_received] = '\0';
+            Serial.print("Received message as string: ");
+            Serial.println((char*)spi_slave_rx_buf);
+
+            // Check if received message is "hello esp32"
+            if (bytes_received == 11 && strcmp((char*)spi_slave_rx_buf, "hello esp32") == 0) {
+                Serial.println("Success: Message matches 'hello esp32'");
+            } else {
+                Serial.print("Message does not match 'hello esp32' (received ");
+                Serial.print(bytes_received);
+                Serial.println(" bytes)");
+            }
+        } else {
+            Serial.println("Error: Received data exceeds buffer size");
+        }
+    } else {
+        Serial.println("Failed to receive message (no data or timeout)");
+    }
+
+    // Check for SPI errors
+    if (slave.numTransactionErrors() > 0) {
+        esp_err_t err = slave.error();
+        Serial.print("SPI error code: 0x");
+        Serial.println(err, HEX);
+    }
+
+    // Clear receive buffer for next transaction
+    memset(spi_slave_rx_buf, 0, BUFFER_SIZE);
+
+    delay(500); // Avoid flooding Serial Monitor
+}
