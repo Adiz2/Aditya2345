@@ -1,0 +1,31 @@
+#include <SPI.h>
+
+#define CS_PIN 10 // Chip Select pin connected to ESP32 D5
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000);
+  Serial.println("Arduino SPI Master starting...");
+
+  // Initialize SPI with 1 MHz clock, SPI_MODE0, MSBFIRST
+  SPI.begin();
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+  pinMode(CS_PIN, OUTPUT);
+  digitalWrite(CS_PIN, HIGH);
+  Serial.println("SPI master initialized (CS=10, MOSI=11, MISO=12, SCK=13)");
+}
+
+void loop() {
+  const char* message = "hello esp32"; // 11 bytes
+  Serial.print("Sending: ");
+  Serial.println(message);
+
+  // Send message
+  digitalWrite(CS_PIN, LOW); // Select slave
+  for (int i = 0; i < 11; i++) {
+    SPI.transfer(message[i]);
+  }
+  digitalWrite(CS_PIN, HIGH); // Deselect slave
+
+  delay(1000); // Send every second
+}
